@@ -153,3 +153,150 @@ $$\text{SNR}_{\text{dB}} = 10 \log_{10} \left( \frac{P_{\text{signal}}}{P_{\text
 > *"가우시안 노이즈 $E \sim \mathcal{N}(0, \sigma^2)$를 추가하였으며, 여기서 $\sigma$는 노이즈 레벨을 나타낸다."*
 > 또 또는
 > *"신호 대 잡음비 $\text{SNR} = 10\text{ dB}$ 조건에서 실험을 진행하였다."*
+
+---
+## 프롬프트
+채널 정렬을 위한 순열 최적화 과정을 수학적으로 전개해줘.
+
+## 응답
+$M$개 노드의 뒤섞인 시계열 채널을 평균 집계(Aggregated Mean) 기반으로 정렬하는 **순열 최적화(Permutation Optimization)** 문제의 수학적 전개 과정입니다.
+
+---
+
+### 1. 의사결정 변수 및 탐색 공간 정의 (Decision Variables & Search Space)
+
+* **대칭군(Symmetric Group) 정의**: $K$개 채널의 가능한 모든 순열의 집합을 대칭군 $\mathcal{S}_K$라 하고, 그 크기는 $\vert{}\mathcal{S}_K\vert{} = K!$ 입니다.
+* **노드별 후보 순열 (Candidate Permutation)**: 노드 $m$ ($1 \le m \le M$)에 할당되는 채널 정렬 함수를 $p_m \in \mathcal{S}_K$로 정의합니다.
+
+$$p_m = [p_{m, 0}, p_{m, 1}, \dots, p_{m, K-1}]$$
+
+
+
+여기서 $p_{m, j}$는 노드 $m$의 $j$번째 관측 채널이 대응하는 원본 채널의 인덱스를 의미합니다.
+* **역순열 (Inverse Permutation)**: 원본 $k$번째 채널 복원을 위해 관측 데이터에서 불러올 채널 인덱스를 가리키는 역순열 매핑 함수 $q_m \in \mathcal{S}_K$를 구합니다.
+
+$$q_m = \text{argsort}(p_m) \implies q_{m, k} = p_m^{-1}(k)$$
+
+
+* **전체 결정 변수 조합 공간 ($\mathbf{P}$)**: $M$개 노드의 순열 집합 $\mathbf{P}$의 전체 탐색 공간 크기는 다음과 같습니다.
+
+$$\mathbf{P} = \{p_1, p_2, \dots, p_M\} \in (\mathcal{S}_K)^M, \quad \vert{}\mathbf{P}\vert{} = (K!)^M$$
+
+
+
+---
+
+### 2. 채널 재구성 및 평균 집계 연산자 (Reconstruction & Aggregation)
+
+후보 순열 조합 $\mathbf{P}$가 주어졌을 때, 각 노드 $m$의 관측 데이터 $X^{(m)} \in \mathbb{R}^{T \times K}$로부터 복원된 시계열 $\hat{X}^{(m)}(p_m) \in \mathbb{R}^{T \times K}$의 $t$번째 타임스텝, $k$번째 채널 성분은 다음과 같습니다.
+
+$$\hat{X}_{t, k}^{(m)}(p_m) = X_{t, q_{m, k}}^{(m)}$$
+
+모든 $M$개 노드의 복원 시계열을 평균 산술 집계한 시계열 행렬 $\bar{X}(\mathbf{P}) \in \mathbb{R}^{T \times K}$의 $k$번째 채널 성분 $\bar{X}_{:, k}(\mathbf{P}) \in \mathbb{R}^T$는 다음과 같이 정의됩니다.
+
+$$\bar{X}_{t, k}(\mathbf{P}) = \frac{1}{M} \sum_{m=1}^{M} \hat{X}_{t, k}^{(m)}(p_m) = \frac{1}{M} \sum_{m=1}^{M} X_{t, q_{m, k}}^{(m)}$$
+
+---
+
+### 3. 목적함수 정의 (Objective Function)
+
+평균 집계된 시계열 $\bar{X}_{:, k}(\mathbf{P})$와 타겟 시계열 $Y_{:, k}$ 간의 유사도를 측정하기 위해 피어슨 상관계수(Pearson Correlation Coefficient) 연산자 $\rho(\cdot, \cdot)$를 사용합니다.
+
+#### 채널별 피어슨 상관계수
+
+$$\rho\left(\bar{X}_{:, k}(\mathbf{P}), Y_{:, k}\right) = \frac{\sum_{t=0}^{T-1} \left(\bar{X}_{t, k}(\mathbf{P}) - \mu_{\bar{X}, k}\right) \left(Y_{t, k} - \mu_{Y, k}\right)}{\sqrt{\sum_{t=0}^{T-1} \left(\bar{X}_{t, k}(\mathbf{P}) - \mu_{\bar{X}, k}\right)^2} \cdot \sqrt{\sum_{t=0}^{T-1} \left(Y_{t, k} - \mu_{Y, k}\right)^2}}$$
+
+여기서 평균값은 다음과 같습니다.
+
+
+$$\mu_{\bar{X}, k} = \frac{1}{T} \sum_{t=0}^{T-1} \bar{X}_{t, k}(\mathbf{P}), \quad \mu_{Y, k} = \frac{1}{T} \sum_{t=0}^{T-1} Y_{t, k}$$
+
+#### 전체 채널 평균 적응도 함수 $J(\mathbf{P})$
+
+모든 $K$개 채널에 대한 상관계수의 평균을 최적화의 목적함수로 설정합니다.
+
+$$J(\mathbf{P}) = \frac{1}{K} \sum_{k=0}^{K-1} \rho\left(\bar{X}_{:, k}(\mathbf{P}), Y_{:, k}\right)$$
+
+---
+
+### 4. 최적화 문제의 최종 수식화 (Optimization Problem Formulation)
+
+이 정렬 문제는 탐색 공간 $(\mathcal{S}_K)^M$ 상에서 목적함수 $J(\mathbf{P})$를 최대화하는 조합 최적화 문제(Combinatorial Optimization Problem)로 귀결됩니다.
+
+$$\mathbf{P}^* = \arg\max_{\mathbf{P} \in (\mathcal{S}_K)^M} J(\mathbf{P})$$
+
+$$\text{subject to } p_m \in \mathcal{S}_K \quad (\forall m \in \{1, 2, \dots, M\})$$
+
+---
+
+### 5. 노이즈 레벨 $\sigma$에 따른 통계적 영향 및 평균 집계의 효과
+
+첨부된 이미지의 (b), (c), (d)와 같이 노이즈 레벨이 $\sigma = 0.1 \to 0.5 \to 0.9$로 증가하는 경우, 관측 신호 $X_{t, j}^{(m)} = Y_{t, \pi_m(j)} + E_{t, \pi_m(j)}^{(m)}$의 신호 대 잡음비(SNR)가 급격히 저하됩니다.
+
+올바른 정렬 순열 $\mathbf{P}^*$를 찾았을 때, 평균 집계 시계열 $\bar{X}_{t, k}(\mathbf{P}^*)$에 잔류하는 노이즈 성분은 다음과 같습니다.
+
+$$\bar{E}_{t, k} = \frac{1}{M} \sum_{m=1}^{M} E_{t, k}^{(m)}$$
+
+각 노드의 노이즈가 독립동일분포 $E_{t, k}^{(m)} \overset{\text{i.i.d.}}{\sim} \mathcal{N}(0, \sigma^2)$를 따른다고 가정하면, 집계된 노이즈의 분산 및 표준편차는 다음과 같이 감쇄됩니다.
+
+$$\operatorname{Var}(\bar{E}_{t, k}) = \frac{\sigma^2}{M} \implies \operatorname{Std}(\bar{E}_{t, k}) = \frac{\sigma}{\sqrt{M}}$$
+
+따라서 노드 수 $M$이 증가할수록 집계 시계열의 유효 노이즈 레벨이 $\frac{1}{\sqrt{M}}$ 배로 줄어들므로, (d)와 같이 $\sigma = 0.9$ 수준의 극심한 노이즈 조건에서도 평균 집계 기반 목적함수 $J(\mathbf{P})$가 강건한(Robust) 강한 상관계수 피크를 형성할 수 있게 됩니다.
+
+---
+## 프롬프트
+
+첨부된 이미지는 너가 생성한 plot_permutation_comparison() 함수의 시각화 결과야. 이미지를 보면 관측 시계열 X의 채널이 뒤섞인 상태에서 평균 집계한 시계열을 Raw Mean X 라고 표시되었고, 채널 정렬 후 평균 집계한 시계열을 Aligned Mean X 라고 표시되었어. 너가 위에서 정리해준 수학적 정의 및 전개 과정을 토대로 두 용어를 수학적으로 표기해줘.
+
+
+## 응답
+
+제시해주신 시각화 결과 그래프의 `Raw Mean X`와 `Aligned Mean X`를 앞에서 정립한 수학적 정의에 맞춰 체계적으로 정리한 표기법입니다.
+
+---
+
+### 1. Raw Mean X (정렬 전 단순 평균 시계열)
+
+채널 뒤섞임(Permutation)을 복원하지 않은 상태, 즉 **각 노드의 관측 채널 순서 그대로 $M$개 노드를 단순 산술 평균**한 시계열입니다. (항등 순열 $I$를 적용한 상태와 동일합니다.)
+
+#### ① 타임스텝 $t$, 채널 $k$ 성분 표기
+
+$$\bar{X}_{t, k}^{\text{raw}} = \frac{1}{M} \sum_{m=1}^{M} X_{t, k}^{(m)}$$
+
+#### ② $k$번째 채널 시계열 벡터 표기 ($T \times 1$)
+
+$$\bar{X}_{:, k}^{\text{raw}} = \frac{1}{M} \sum_{m=1}^{M} X_{:, k}^{(m)}$$
+
+#### ③ 전체 시계열 행렬 표기 ($T \times K$)
+
+$$\bar{X}^{\text{raw}} = \frac{1}{M} \sum_{m=1}^{M} X^{(m)}$$
+
+---
+
+### 2. Aligned Mean X (채널 정렬 후 집계 평균 시계열)
+
+최적화 알고리즘을 통해 추정된 **최적 순열 조합 $\mathbf{P}^* = {p_1^*, p_2^*, \dots, p_M^*}$의 역순열 매핑 $q_{m, k}^* = (p_m^*)^{-1}(k)$를 각 노드에 적용하여 복원한 뒤 $M$개 노드를 산술 평균**한 시계열입니다.
+
+#### ① 타임스텝 $t$, 채널 $k$ 성분 표기
+
+$$\bar{X}_{t, k}^{\text{aligned}} = \bar{X}_{t, k}(\mathbf{P}^*) = \frac{1}{M} \sum_{m=1}^{M} X_{t, q_{m, k}^*}^{(m)}$$
+
+* 여기서 $q_{m, k}^*$는 노드 $m$의 관측 데이터 $X^{(m)}$에서 원본 $k$번째 채널 위치에 해당하도록 재배열할 관측 채널 인덱스입니다.
+
+#### ② $k$번째 채널 시계열 벡터 표기 ($T \times 1$)
+
+$$\bar{X}_{:, k}^{\text{aligned}} = \bar{X}_{:, k}(\mathbf{P}^*) = \frac{1}{M} \sum_{m=1}^{M} X_{:, q_{m, k}^*}^{(m)}$$
+
+#### ③ 전체 복원 시계열 행렬 표기 ($T \times K$)
+
+$$\bar{X}^{\text{aligned}} = \bar{X}(\mathbf{P}^*) = \frac{1}{M} \sum_{m=1}^{M} \hat{X}^{(m)}(p_m^*)$$
+
+---
+
+### 3. 수학적 수식 비교 요약
+
+| 용어 (그래프 범례) | 의미 | 성분별 수식 ($t$번째 시간, $k$번째 채널) | 행렬 표기 |
+| --- | --- | --- | --- |
+| **`Target Y`** | 기준 신호 | $Y_{t, k}$ | $Y$ |
+| **`Raw Mean X`** | 정렬 전 단순 평균 | $\displaystyle \bar{X}_{t, k}^{\text{raw}} = \frac{1}{M} \sum_{m=1}^{M} X_{t, k}^{(m)}$ | $\displaystyle \frac{1}{M} \sum_{m=1}^{M} X^{(m)}$ |
+| **`Aligned Mean X`** | 정렬 후 최적 집계 평균 | $\displaystyle \bar{X}_{t, k}^{\text{aligned}} = \frac{1}{M} \sum_{m=1}^{M} X_{t, q_{m, k}^*}^{(m)}$ | $\displaystyle \frac{1}{M} \sum_{m=1}^{M} \hat{X}^{(m)}(p_m^*)$ |
