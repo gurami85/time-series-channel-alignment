@@ -1,4 +1,60 @@
 ## 프롬프트
+다시 이 연구를 구성하는 주요 개념부터 확실히 짚고 넘어가려고 해. 이 논문은 범용적으로 어떤 수리적인 문제를 다루는거지?
+
+## 응답
+본 연구가 다루는 범용적 수학 문제의 본질을 핵심 개념 위주로 깔끔하게 정리해 드립니다.
+
+### 📌 핵심 문제 정의
+
+본 논문은 "다중 에이전트 다변량 시계열의 역순열 조합 최적화 문제(Combinatorial Optimization for Inverse Permutation of Multi-Agent Multivariate Time-Series)"를 다룹니다.
+
+이 문제는 신호 처리 및 최적화 학계에서 전형적인 **NP-hard** 문제로 분류됩니다.
+
+---
+
+### 1. 수학적 수식 모델링
+
+* **기준 시계열 (Reference, $Y$):** $T$개의 시간 축과 $K$개의 채널을 가진 기준 데이터 $Y \in \mathbb{R}^{T \times K}$
+* **소스 시계열 (Sources, $X$):** $M$개의 소스 노드 각각이 $K$개의 채널을 가지는 데이터 $X_m \in \mathbb{R}^{T \times K} \quad (m = 1, 2, \dots, M)$
+* **채널 섞임 (Shuffling Matrix, $P_m$):** 각 소스 $m$은 알 수 없는 $K \times K$ 크기의 순열 행렬 $P_m$에 의해 채널 순서가 뒤섞인 상태입니다.
+* **복원 및 집계 (Reconstruction & Aggregation):**
+후보 순열 $\hat{P}_m$을 적용하여 정렬한 뒤, $M$개 소스의 평균을 내어 추정 시계열 $\hat{Y}$를 생성합니다.
+
+$$\hat{Y} = \frac{1}{M} \sum_{m=1}^{M} X_m \hat{P}_m^{-1}$$
+
+
+
+---
+
+### 2. 목적 함수 (Objective Function)
+
+추정 시계열 $\hat{Y}$와 기준 시계열 $Y$ 간의 **채널별 평균 피어슨 상관계수(Pearson Correlation Coefficient)를 극대화**하는 순열 조합 $(\hat{P}_1, \hat{P}_2, \dots, \hat{P}_M)$을 찾는 것입니다.
+
+$$\max_{\hat{P}_1, \dots, \hat{P}_M} \frac{1}{K} \sum_{k=1}^{K} \text{Corr}\left(Y_{:, k}, \hat{Y}_{:, k}\right)$$
+
+---
+
+### 3. 본 문제가 수학적으로 대단히 어려운 이유
+
+1. **조합 폭발 (Combinatorial Explosion):**
+* 단일 소스의 가능한 경우의 수: $K!$
+* 전체 $M$개 소스의 전체 탐색 공간: $(K!)^M$
+* $K=16, M=30$ 조건에서는 경우의 수가 $(20\text{조})^{30}$으로, 전수 조사가 물리적으로 불가능합니다.
+
+
+2. **국소 최적해 함정 (Local Optima & Non-convexity):**
+* $M$개 소스가 서로 얽혀서 평균($\hat{Y}$)을 이루기 때문에, 특정 소스 하나만 맞춘다고 해서 상관계수 결과가 정직하게 비례하여 상승하지 않습니다.
+* 이에 따라 경사 하강법이나 헝가리안 알고리즘 같은 탐욕적(Greedy) 기법은 극초반 함정에 빠져 수렴하지 못합니다.
+
+
+
+---
+
+### 💡 한 줄 요약
+
+> **"순서가 꼬이고 노이즈가 섞인 $M$개의 센서 데이터 뭉치들을, 단 하나의 기준 파형 $Y$만 보고 역순열을 추정하여 원래의 채널 위치로 완벽히 복원해 내는 조합 최적화 문제"**
+
+## 프롬프트
 generate_virtual_data() 함수에서 채널 별 시계열을 생성하고(1), 노이즈를 추가하고(2), 채널을 무작위로 섞는(3) 전체 과정을 수학적으로 정의 및 전개해줘. 
 - (1): Y[:, k] = np.sin(time_steps * (0.5 + 0.1k)) + np.cos(time_steps * (0.2k))
 - (2): noisy_source = Y + np.random.normal(0, noise_level, (T, K))
